@@ -6,7 +6,6 @@ import * as backend from "./api/backend";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import ChatPanel from "./components/ChatPanel";
 import MetricsPanel from "./components/MetricsPanel";
-import PipelineDeepDive from "./components/PipelineDeepDive";
 
 const defaultTools = [
   {
@@ -141,7 +140,6 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
   const [processSteps, setProcessSteps] = useState([]);
-  const [lastOptimizationOutput, setLastOptimizationOutput] = useState(null);
 
   useEffect(() => {
     writeSessionValue(STORAGE_KEYS.messages, messages);
@@ -254,7 +252,8 @@ function App() {
         attachmentIds
       );
 
-      setProcessSteps((s) => s.map((step) => ({ ...step, status: "done",
+      setProcessSteps((s) => s.map((step) => ({
+        ...step, status: "done",
         detail: step.label === "Response Generation"
           ? `${processResult.inputTokens + processResult.outputTokens} tokens`
           : step.detail
@@ -262,7 +261,6 @@ function App() {
 
       const metrics = buildMetrics(processResult, optimizationOutput);
 
-      setLastOptimizationOutput(optimizationOutput);
       setMessages((current) => [
         ...current,
         {
@@ -402,14 +400,6 @@ function App() {
           <MetricsPanel currentMetrics={currentMetrics} processSteps={processSteps} />
           <AnalyticsPanel metricsHistory={metricsHistory} />
         </aside>
-      </section>
-
-      <section className="deep-dive-row">
-        <PipelineDeepDive
-          currentMetrics={currentMetrics}
-          optimizationToggle={optimizationToggle}
-          lastOptimizationOutput={lastOptimizationOutput}
-        />
       </section>
     </main>
   );
