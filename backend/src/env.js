@@ -3,9 +3,13 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 const ENV_KEYS = [
-  "GEMINI_API_KEY",
-  "GEMINI_FLASH_MODEL",
-  "GEMINI_PRO_MODEL",
+  "OLLAMA_BASE_URL",
+  "OLLAMA_MODEL",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_REGION",
+  "BEDROCK_CHEAP_MODEL",
+  "BEDROCK_EXPENSIVE_MODEL",
   "LANGFUSE_PUBLIC_KEY",
   "LANGFUSE_SECRET_KEY",
   "LANGFUSE_BASE_URL",
@@ -25,7 +29,6 @@ function isPlaceholder(value) {
     !value ||
     value.includes("your_") ||
     value.includes("[YOUR_ACTUAL_KEY_HERE]") ||
-    value === "AIzaSy_your_gemini_key_here" ||
     value === "pk-lf-your_public_key_here" ||
     value === "sk-lf-your_secret_key_here"
   );

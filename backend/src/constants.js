@@ -2,28 +2,36 @@ const { loadEnv } = require("./env");
 
 loadEnv();
 
+// Two-model setup: small fast model for basic queries, larger model for complex tasks.
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "mistral";
+const OLLAMA_CHEAP_MODEL = process.env.OLLAMA_CHEAP_MODEL || "qwen2.5:1.5b";
+const OLLAMA_EXPENSIVE_MODEL = process.env.OLLAMA_EXPENSIVE_MODEL || OLLAMA_MODEL;
+
 const MODELS = {
-  FLASH: process.env.GEMINI_FLASH_MODEL || "gemini-2.5-flash",
-  PRO: process.env.GEMINI_PRO_MODEL || "gemini-3-pro-preview"
+  CHEAP: OLLAMA_CHEAP_MODEL,
+  EXPENSIVE: OLLAMA_EXPENSIVE_MODEL
 };
 
+// Simulated pricing to demonstrate cost savings from optimization.
+// In production, these would map to actual paid API costs.
 const PRICING_PER_MILLION_TOKENS = {
-  [MODELS.FLASH]: {
-    input: 0.075,
-    output: 0.3
+  [MODELS.CHEAP]: {
+    input: 0.06,
+    output: 0.24
   },
-  [MODELS.PRO]: {
-    input: 1.5,
-    output: 6
+  [MODELS.EXPENSIVE]: {
+    input: 0.80,
+    output: 3.20
   }
 };
 
-const PRO_TOOL_TOKEN_ESTIMATE = 120;
-const PRO_QUERY_ROUTING_AVOIDED_TOKENS = 350;
+const EXPENSIVE_TOOL_TOKEN_ESTIMATE = 120;
+const EXPENSIVE_QUERY_ROUTING_AVOIDED_TOKENS = 350;
 
 module.exports = {
   MODELS,
+  OLLAMA_MODEL,
   PRICING_PER_MILLION_TOKENS,
-  PRO_TOOL_TOKEN_ESTIMATE,
-  PRO_QUERY_ROUTING_AVOIDED_TOKENS
+  EXPENSIVE_TOOL_TOKEN_ESTIMATE,
+  EXPENSIVE_QUERY_ROUTING_AVOIDED_TOKENS
 };

@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: token-optimizer-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - token-optimizer-network
+    # After first start, run: docker exec token-optimizer-ollama ollama pull mistral
+
   backend:
     build: ./backend
     container_name: token-optimizer-backend
@@ -8,10 +19,13 @@ services:
       - "3001:3001"
     environment:
       - NODE_ENV=development
+      - OLLAMA_BASE_URL=http://ollama:11434
     env_file:
       - ./backend/.env
     volumes:
       - ./backend/src:/app/src
+    depends_on:
+      - ollama
     networks:
       - token-optimizer-network
 
@@ -33,3 +47,6 @@ services:
 networks:
   token-optimizer-network:
     driver: bridge
+
+volumes:
+  ollama-data:

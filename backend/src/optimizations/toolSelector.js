@@ -1,66 +1,34 @@
-const { MODELS, PRO_TOOL_TOKEN_ESTIMATE } = require("../constants");
-const GeminiWrapper = require("../geminiWrapper");
-const { extractJsonObject } = require("../messageUtils");
+const { EXPENSIVE_TOOL_TOKEN_ESTIMATE } = require("../constants");
 
-// Tool selection:
-// We ask Flash to choose which "tools" are relevant for a query.
-// In this prototype we do not execute tools; we only inject the selected tool
-// descriptions into the prompt to focus the model's response.
-function formatTools(availableTools = []) {
-  return availableTools
-    .map((tool) => {
-      const keywords = Array.isArray(tool.keywords) ? tool.keywords.join(", ") : "";
-      return `- ${tool.name}: ${tool.description || "No description"}${keywords ? ` Keywords: ${keywords}` : ""}`;
-    })
-    .join("\n");
-}
-
-async function toolSelector(userQuery, availableTools = [], options = {}) {
+// Tool selection — uses fast keyword matching only (no LLM call).
+// Matches query keywords against tool keywords for instant selection.
+function toolSelector(userQuery, availableTools = [], options = {}) {
   if (!Array.isArray(availableTools) || availableTools.length === 0) {
-    return {
+    return Promise.resolve({
       selectedTools: [],
-      flashTokensUsed: 0,
+      ollamaTokensUsed: 0,
+      ollamaCost: 0,
       flashCost: 0
-    };
+    });
   }
 
-  const gemini = options.gemini || new GeminiWrapper();
-  const toolNames = new Set(availableTools.map((tool) => tool.name));
-  const prompt = [
-    `User query: ${userQuery}`,
-    "",
-    "Available tools:",
-    formatTools(availableTools),
-    "",
-    "Which tools do we ACTUALLY need to answer this query?",
-    'Return only a JSON object in this exact shape: {"neededTools":["tool_name"]}.',
-    "If no tool is needed, return an empty array."
-  ].join("\n");
+  const normalizedQuery = String(userQuery || "").toLowerCase();
 
-  const result = await gemini.callModel(
-    MODELS.FLASH,
-    [{ role: "user", content: prompt }],
-    300,
-    { optimization: "toolSelection" }
-  );
+  // Match tools by checking if any of their keywords appear in the query
+  const selectedTools = availableTools
+    .filter((tool) => {
+      const keywords = Array.isArray(tool.keywords) ? tool.keywords : [];
+      return keywords.some((keyword) => normalizedQuery.includes(keyword.toLowerCase()));
+    })
+    .map((tool) => tool.name);
 
-  let selectedTools = availableTools.map((tool) => tool.name);
-
-  try {
-    const parsed = extractJsonObject(result.response);
-    if (Array.isArray(parsed.neededTools)) {
-      selectedTools = parsed.neededTools.filter((toolName) => toolNames.has(toolName));
-    }
-  } catch (error) {
-    selectedTools = availableTools.map((tool) => tool.name);
-  }
-
-  return {
+  return Promise.resolve({
     selectedTools,
-    flashTokensUsed: result.inputTokens + result.outputTokens,
-    flashCost: result.totalCost,
-    tokensAvoided: Math.max(0, availableTools.length - selectedTools.length) * PRO_TOOL_TOKEN_ESTIMATE
-  };
+    ollamaTokensUsed: 0,
+    ollamaCost: 0,
+    flashCost: 0,
+    tokensAvoided: Math.max(0, availableTools.length - selectedTools.length) * EXPENSIVE_TOOL_TOKEN_ESTIMATE
+  });
 }
 
 module.exports = toolSelector;

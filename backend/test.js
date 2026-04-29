@@ -1,4 +1,4 @@
-process.env.MOCK_GEMINI = "true";
+process.env.MOCK_LLM = "true";
 process.env.DISABLE_LANGFUSE = "true";
 process.env.LANGFUSE_PUBLIC_KEY = process.env.LANGFUSE_PUBLIC_KEY || "";
 process.env.LANGFUSE_SECRET_KEY = process.env.LANGFUSE_SECRET_KEY || "";
@@ -21,10 +21,10 @@ function assert(condition, message) {
 }
 
 async function testToolSelector() {
-  const result = await toolSelector("what is 2+2", mockAvailableTools);
+  const result = await toolSelector("calculate what is 2+2", mockAvailableTools);
   assert(Array.isArray(result.selectedTools), "selectedTools must be an array");
   assert(result.selectedTools.includes("calculator"), "calculator should be selected for arithmetic");
-  assert(typeof result.flashCost === "number", "flashCost must be numeric");
+  assert(typeof result.ollamaCost === "number", "ollamaCost must be numeric");
   console.log("PASS Tool selector test");
 }
 
@@ -41,11 +41,11 @@ async function testQueryRouter() {
   const simple = await queryRouter("What is the capital of France?");
   const complex = await queryRouter("What are the latest AI papers from today?");
   const coding = await queryRouter("Debug this Kubernetes deployment automation script.");
-  assert(simple.shouldUsePro === false, "simple query should route to Flash");
-  assert(complex.shouldUsePro === false, "current-data query should route to Flash");
-  assert(complex.useGoogleSearch === true, "current-data query should use Google Search");
-  assert(coding.shouldUsePro === true, "coding and DevOps query should route to Pro");
-  assert(coding.useGoogleSearch === true, "coding and DevOps query should use Google Search");
+  assert(simple.shouldUseExpensive === false, "simple query should route to cheap model");
+  assert(complex.shouldUseExpensive === false, "current-data query should route to cheap model");
+  assert(complex.useWebSearch === true, "current-data query should use web search");
+  assert(coding.shouldUseExpensive === true, "coding and DevOps query should route to expensive model");
+  assert(coding.useWebSearch === true, "coding and DevOps query should use web search");
   console.log("PASS Query router test");
 }
 
@@ -76,6 +76,8 @@ async function testApiEndpoints() {
   try {
     const health = await fetch(`${baseUrl}/health`);
     assert(health.ok, "health endpoint should respond");
+    const healthJson = await health.json();
+    assert(healthJson.architecture === "ollama-only", "health should report ollama-only architecture");
 
     const optimize = await fetch(`${baseUrl}/api/optimize`, {
       method: "POST",

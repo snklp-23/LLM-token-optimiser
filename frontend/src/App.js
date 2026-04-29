@@ -6,6 +6,7 @@ import * as backend from "./api/backend";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import ChatPanel from "./components/ChatPanel";
 import MetricsPanel from "./components/MetricsPanel";
+import PipelineDeepDive from "./components/PipelineDeepDive";
 
 const defaultTools = [
   {
@@ -104,7 +105,7 @@ function buildMetrics(processResult, optimizationOutput) {
   const costAfterOptimization = money(processResult.totalCost) + money(costs.totalFlashCost);
   const costBeforeOptimization =
     costAfterOptimization +
-    money(tokensSaved * (String(processResult.model || "").includes("pro") ? 0.0000015 : 0.000000075));
+    money(tokensSaved * (String(processResult.model || "").includes("pro") ? 0.0000008 : 0.00000006));
 
   return {
     tokensBeforeOptimization,
@@ -139,6 +140,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
+  const [processSteps, setProcessSteps] = useState([]);
+  const [lastOptimizationOutput, setLastOptimizationOutput] = useState(null);
 
   useEffect(() => {
     writeSessionValue(STORAGE_KEYS.messages, messages);
@@ -206,14 +209,22 @@ function App() {
     setMessages((current) => [...current, userMessage]);
     setError("");
     setIsLoading(true);
+    setProcessSteps([
+      { label: "Query Routing", status: "running", detail: "Classifying query complexity..." },
+      { label: "Tool Selection", status: "pending", detail: null },
+      { label: "Context Compression", status: "pending", detail: null },
+      { label: "Response Generation", status: "pending", detail: null }
+    ]);
 
     try {
       const historyBeforeQuery = conversationHistory.filter(
         (message) => message.content !== initialMessages[0].content
       );
-      // Two-step flow:
-      // 1) /optimize decides model, compression, tools, and search grounding
-      // 2) /process runs the chosen model with compressed context and attachments
+
+      // Step 1-3: Optimize (routing + tool selection + compression)
+      setProcessSteps((s) => s.map((step, i) =>
+        i <= 2 ? { ...step, status: "running", detail: i === 0 ? "Scanning keywords..." : i === 1 ? "Matching tools..." : "Summarizing history..." } : step
+      ));
       const optimizationOutput = await backend.optimizeQuery(
         query,
         historyBeforeQuery,
@@ -222,6 +233,17 @@ function App() {
         sessionId,
         attachmentIds
       );
+
+      const decision = optimizationOutput?.decision || {};
+      const savings = optimizationOutput?.tokenSavingsMetrics || {};
+      setProcessSteps([
+        { label: "Query Routing", status: "done", detail: decision.shouldUseExpensive ? "→ Advanced model (mistral)" : "→ Fast model (qwen)" },
+        { label: "Tool Selection", status: "done", detail: `Kept ${(decision.selectedTools || []).length} of 4 tools` },
+        { label: "Context Compression", status: "done", detail: `${savings.tokensSavedByContextCompression || 0} tokens compressed` },
+        { label: "Response Generation", status: "running", detail: `Using ${decision.model || "ollama"}...` }
+      ]);
+
+      // Step 4: Generate response
       const processResult = await backend.processQuery(
         query,
         historyBeforeQuery,
@@ -231,8 +253,16 @@ function App() {
         sessionId,
         attachmentIds
       );
+
+      setProcessSteps((s) => s.map((step) => ({ ...step, status: "done",
+        detail: step.label === "Response Generation"
+          ? `${processResult.inputTokens + processResult.outputTokens} tokens`
+          : step.detail
+      })));
+
       const metrics = buildMetrics(processResult, optimizationOutput);
 
+      setLastOptimizationOutput(optimizationOutput);
       setMessages((current) => [
         ...current,
         {
@@ -339,7 +369,7 @@ function App() {
           </div>
           <div>
             <h1>Token Optimizer</h1>
-            <p>Gemini routing, context compression, and tool selection</p>
+            <p>Ollama routing, context compression, and tool selection</p>
           </div>
         </div>
         <button className="icon-text-button" onClick={handleRefreshMetrics} type="button">
@@ -369,9 +399,17 @@ function App() {
           uploadedFiles={uploadedFiles}
         />
         <aside className="insights-column">
-          <MetricsPanel currentMetrics={currentMetrics} />
+          <MetricsPanel currentMetrics={currentMetrics} processSteps={processSteps} />
           <AnalyticsPanel metricsHistory={metricsHistory} />
         </aside>
+      </section>
+
+      <section className="deep-dive-row">
+        <PipelineDeepDive
+          currentMetrics={currentMetrics}
+          optimizationToggle={optimizationToggle}
+          lastOptimizationOutput={lastOptimizationOutput}
+        />
       </section>
     </main>
   );

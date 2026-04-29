@@ -66,7 +66,7 @@ const mockQueries = [
 function generateConversationHistory(length = 10) {
   const topics = [
     "token optimization",
-    "Gemini models",
+    "Bedrock models",
     "Langfuse traces",
     "React dashboards",
     "backend APIs"

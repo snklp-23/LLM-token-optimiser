@@ -2,7 +2,7 @@
   "name": "token-optimizer",
   "version": "1.0.0",
   "private": true,
-  "description": "Prototype for Gemini token optimization with Langfuse tracking.",
+  "description": "Token optimization middleware with Ollama routing and AWS Bedrock generation.",
   "scripts": {
     "start:backend": "npm --prefix backend start",
     "start:frontend": "npm --prefix frontend start"

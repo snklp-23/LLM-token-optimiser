@@ -1,44 +1,43 @@
-const { createPartFromText, createPartFromUri } = require("@google/genai");
-
 // Message conversion utilities:
-// - Frontend + internal code uses `{ role, content, attachments }`
-// - Gemini SDK expects `contents: [{ role, parts: [...] }]`
-// Attachments are stored as URIs (Gemini Files API) and are attached as URI parts.
+// - Frontend + internal code uses `{ role, content }`
+// - Ollama expects `{ role, content }` (OpenAI-compatible)
+// - Bedrock Converse API expects `{ role, content: [{ text }] }`
+
 function normalizeRole(role) {
   if (role === "assistant" || role === "model") {
-    return "model";
+    return "assistant";
   }
 
   return "user";
 }
 
-function toGeminiContents(messages) {
+// Convert to Bedrock Converse API format.
+// Bedrock requires content as an array of content blocks.
+function toBedrockMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
   }
 
   return messages
-    .filter((message) => message && (typeof message.content === "string" || Array.isArray(message.attachments)))
-    .map((message) => {
-      const parts = [];
+    .filter((message) => message && typeof message.content === "string" && message.content.trim())
+    .map((message) => ({
+      role: normalizeRole(message.role),
+      content: [{ text: message.content }]
+    }));
+}
 
-      if (typeof message.content === "string" && message.content.trim()) {
-        parts.push(createPartFromText(message.content));
-      }
+// Convert to Ollama-compatible format (same as OpenAI chat format).
+function toOllamaMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
 
-      // Attach file URIs so Gemini can read images/PDFs/text files.
-      for (const attachment of message.attachments || []) {
-        if (attachment?.uri && attachment?.mimeType) {
-          parts.push(createPartFromUri(attachment.uri, attachment.mimeType));
-        }
-      }
-
-      return {
-        role: normalizeRole(message.role),
-        parts
-      };
-    })
-    .filter((message) => message.parts.length > 0);
+  return messages
+    .filter((message) => message && typeof message.content === "string" && message.content.trim())
+    .map((message) => ({
+      role: normalizeRole(message.role),
+      content: message.content
+    }));
 }
 
 function toPlainMessages(messages) {
@@ -50,15 +49,7 @@ function toPlainMessages(messages) {
     .filter((message) => message && typeof message.content === "string")
     .map((message) => ({
       role: message.role === "assistant" || message.role === "model" ? "assistant" : "user",
-      content: message.content,
-      attachments: Array.isArray(message.attachments)
-        ? message.attachments.map((attachment) => ({
-            id: attachment.id,
-            name: attachment.name,
-            mimeType: attachment.mimeType,
-            uri: attachment.uri
-          }))
-        : []
+      content: message.content
     }));
 }
 
@@ -102,6 +93,7 @@ module.exports = {
   estimateTokensFromText,
   extractJsonObject,
   latestUserMessage,
-  toGeminiContents,
+  toBedrockMessages,
+  toOllamaMessages,
   toPlainMessages
 };

@@ -1,17 +1,9 @@
-const { MODELS, PRO_TOOL_TOKEN_ESTIMATE } = require("./constants");
-const GeminiWrapper = require("./geminiWrapper");
+const { MODELS, EXPENSIVE_TOOL_TOKEN_ESTIMATE } = require("./constants");
+const OllamaClient = require("./ollamaClient");
 const contextCompressor = require("./optimizations/contextCompressor");
 const queryRouter = require("./optimizations/queryRouter");
 const toolSelector = require("./optimizations/toolSelector");
 const { estimateTokensFromMessages, toPlainMessages } = require("./messageUtils");
-
-async function countMessages(gemini, messages) {
-  if (gemini && typeof gemini.countTokens === "function") {
-    return gemini.countTokens(MODELS.PRO, messages);
-  }
-
-  return estimateTokensFromMessages(messages);
-}
 
 function enabledMap(useOptimizations = {}) {
   return {
@@ -30,76 +22,69 @@ async function optimizationPipeline(input = {}, options = {}) {
   } = input;
 
   const enabled = enabledMap(useOptimizations);
-  const gemini = options.gemini || new GeminiWrapper();
+  const ollama = options.ollama || new OllamaClient();
   const plainHistory = toPlainMessages(conversationHistory);
 
-  // 1) Decide model + whether to enable Google Search grounding.
-  // This uses Flash to keep the “optimizer overhead” cheap.
-  let routerResult = {
-    shouldUsePro: true,
-    reason: "Query routing disabled; using Pro baseline.",
-    flashTokensUsed: 0,
-    flashCost: 0,
-    tokensAvoided: 0
-  };
+  // Run all three optimization steps IN PARALLEL to minimize latency.
+  // Each step calls Ollama independently — no dependencies between them.
+  const [routerResult, toolResult, compressionResult] = await Promise.all([
+    // 1) Query routing
+    enabled.queryRouting
+      ? queryRouter(userQuery, input.complexityThreshold || 0.6, { ollama })
+      : Promise.resolve({
+          shouldUseExpensive: true,
+          reason: "Query routing disabled; using expensive model baseline.",
+          ollamaTokensUsed: 0, ollamaCost: 0, flashCost: 0, tokensAvoided: 0
+        }),
 
-  if (enabled.queryRouting) {
-    routerResult = await queryRouter(userQuery, input.complexityThreshold || 0.6, { gemini });
-  }
+    // 2) Tool selection (we don't know routing result yet, so always run it)
+    enabled.toolSelection && availableTools.length > 0
+      ? toolSelector(userQuery, availableTools, { ollama })
+      : Promise.resolve({
+          selectedTools: availableTools.map((tool) => tool.name),
+          ollamaTokensUsed: 0, ollamaCost: 0, flashCost: 0, tokensAvoided: 0
+        }),
 
-  // 2) Tool selection runs only when we're going to do a Pro call.
-  // (In this prototype, tool selection affects prompt context, not actual tool execution.)
-  let toolResult = {
-    selectedTools: availableTools.map((tool) => tool.name),
-    flashTokensUsed: 0,
-    flashCost: 0,
-    tokensAvoided: 0
-  };
+    // 3) Context compression
+    enabled.contextCompression && plainHistory.length > (input.maxMessagesToKeep || 5)
+      ? contextCompressor(plainHistory, input.maxMessagesToKeep || 5, { ollama })
+      : Promise.resolve({
+          compressedMessages: plainHistory,
+          tokensBeforeCompression: estimateTokensFromMessages(plainHistory),
+          tokensAfterCompression: estimateTokensFromMessages(plainHistory),
+          tokensSaved: 0, costSaved: 0, compressionCost: 0, flashTokensUsed: 0
+        })
+  ]);
 
-  if (enabled.toolSelection && routerResult.shouldUsePro) {
-    toolResult = await toolSelector(userQuery, availableTools, { gemini });
-  } else if (!routerResult.shouldUsePro) {
+  // If routing decided "cheap", clear tool selection (cheap model doesn't need tools)
+  if (!routerResult.shouldUseExpensive) {
     toolResult.selectedTools = [];
-    toolResult.tokensAvoided = availableTools.length * PRO_TOOL_TOKEN_ESTIMATE;
+    toolResult.tokensAvoided = availableTools.length * EXPENSIVE_TOOL_TOKEN_ESTIMATE;
   }
 
-  // 3) Context compression summarizes older messages into a short “summary” message,
-  // while keeping the most recent N messages unchanged.
-  const contextTokensBefore = await countMessages(gemini, plainHistory);
-  let compressionResult = {
-    compressedMessages: plainHistory,
-    tokensBeforeCompression: contextTokensBefore,
-    tokensAfterCompression: contextTokensBefore,
-    tokensSaved: 0,
-    costSaved: 0,
-    compressionCost: 0,
-    flashTokensUsed: 0
-  };
-
-  if (enabled.contextCompression) {
-    compressionResult = await contextCompressor(plainHistory, input.maxMessagesToKeep || 5, { gemini });
-  }
-
-  const totalFlashCost =
-    (routerResult.flashCost || 0) +
-    (toolResult.flashCost || 0) +
-    (compressionResult.compressionCost || 0);
+  // All optimization costs are zero because Ollama runs locally.
+  const totalOptimizationCost = 0;
 
   return {
     decision: {
-      shouldUsePro: routerResult.shouldUsePro,
-      useGoogleSearch: routerResult.useGoogleSearch,
+      shouldUseExpensive: routerResult.shouldUseExpensive,
+      shouldUsePro: routerResult.shouldUseExpensive,
+      useWebSearch: routerResult.useWebSearch,
       taskType: routerResult.taskType,
       routingReason: routerResult.reason,
       selectedTools: toolResult.selectedTools,
       compressedMessages: compressionResult.compressedMessages,
-      model: routerResult.shouldUsePro ? MODELS.PRO : MODELS.FLASH
+      model: routerResult.shouldUseExpensive ? MODELS.EXPENSIVE : MODELS.CHEAP
     },
     optimizationCosts: {
-      flashCostTool: toolResult.flashCost || 0,
-      flashCostRouter: routerResult.flashCost || 0,
-      flashCostCompression: compressionResult.compressionCost || 0,
-      totalFlashCost
+      ollamaCostTool: 0,
+      ollamaCostRouter: 0,
+      ollamaCostCompression: 0,
+      totalOptimizationCost: 0,
+      flashCostTool: 0,
+      flashCostRouter: 0,
+      flashCostCompression: 0,
+      totalFlashCost: 0
     },
     tokenSavingsMetrics: {
       contextsTokensBeforeCompression: compressionResult.tokensBeforeCompression,

@@ -1,27 +1,20 @@
-const { MODELS } = require("../constants");
-const GeminiWrapper = require("../geminiWrapper");
+const { MODELS, PRICING_PER_MILLION_TOKENS } = require("../constants");
+const OllamaClient = require("../ollamaClient");
 const { estimateTokensFromMessages, toPlainMessages } = require("../messageUtils");
 
 // Context compression:
 // - If the conversation is short, do nothing.
 // - Otherwise, summarize older messages into a compact "Previous conversation summary:" message
 //   and keep the last N turns verbatim. This reduces prompt size while preserving recent context.
+// Ollama (Mistral) is used for generating the summary (free).
 function formatMessages(messages) {
   return messages.map((message) => `${message.role}: ${message.content}`).join("\n");
 }
 
-async function countMessages(gemini, modelName, messages) {
-  if (typeof gemini.countTokens === "function") {
-    return gemini.countTokens(modelName, messages);
-  }
-
-  return estimateTokensFromMessages(messages);
-}
-
 async function contextCompressor(messages = [], maxMessagesToKeep = 5, options = {}) {
   const plainMessages = toPlainMessages(messages);
-  const gemini = options.gemini || new GeminiWrapper();
-  const tokensBeforeCompression = await countMessages(gemini, MODELS.PRO, plainMessages);
+  const ollama = options.ollama || options.gemini || new OllamaClient();
+  const tokensBeforeCompression = estimateTokensFromMessages(plainMessages);
 
   if (plainMessages.length <= maxMessagesToKeep) {
     return {
@@ -45,8 +38,7 @@ async function contextCompressor(messages = [], maxMessagesToKeep = 5, options =
     "Return only the summary text, no extra text."
   ].join("\n");
 
-  const result = await gemini.callModel(
-    MODELS.FLASH,
+  const result = await ollama.callModel(
     [{ role: "user", content: prompt }],
     250,
     { optimization: "contextCompression" }
@@ -60,7 +52,7 @@ async function contextCompressor(messages = [], maxMessagesToKeep = 5, options =
     },
     ...recentMessages
   ];
-  let tokensAfterCompression = await countMessages(gemini, MODELS.PRO, compressedMessages);
+  let tokensAfterCompression = estimateTokensFromMessages(compressedMessages);
 
   if (tokensAfterCompression >= tokensBeforeCompression) {
     summary = summary.slice(0, 300).trim();
@@ -72,15 +64,15 @@ async function contextCompressor(messages = [], maxMessagesToKeep = 5, options =
       ...recentMessages
     ];
     tokensAfterCompression = Math.min(
-      await countMessages(gemini, MODELS.PRO, compressedMessages),
+      estimateTokensFromMessages(compressedMessages),
       Math.max(0, tokensBeforeCompression - 1)
     );
   }
 
   const tokensSaved = Math.max(0, tokensBeforeCompression - tokensAfterCompression);
-  const costSaved = gemini.calculateCost
-    ? gemini.calculateCost(MODELS.PRO, tokensSaved, 0)
-    : tokensSaved * 0.0000015;
+  // Simulated cost savings based on expensive model pricing
+  const pricing = PRICING_PER_MILLION_TOKENS[MODELS.EXPENSIVE] || { input: 0.80 };
+  const costSaved = (tokensSaved / 1_000_000) * pricing.input;
 
   return {
     compressedMessages,
@@ -88,7 +80,7 @@ async function contextCompressor(messages = [], maxMessagesToKeep = 5, options =
     tokensAfterCompression,
     tokensSaved,
     costSaved,
-    compressionCost: result.totalCost,
+    compressionCost: 0, // Ollama is free
     flashTokensUsed: result.inputTokens + result.outputTokens
   };
 }
