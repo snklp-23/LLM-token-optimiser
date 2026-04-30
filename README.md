@@ -31,24 +31,52 @@ Before returning the response to the frontend, the backend calculates exactly ho
 
 ```mermaid
 graph TD
-    User([User Client]) --> |User Query & History| API[Express API /api/process]
+    %% Define Nodes
+    User([User Client])
+    API[Express API /api/process]
     
-    subgraph Pipeline
-    API --> |Parallel Execution| Routing[Query Router]
-    API --> |Parallel Execution| Tooling[Tool Selector]
-    API --> |Parallel Execution| Compression[Context Compressor]
-    
-    Routing -.-> |Regex Guardrails| FastLogic[Instant Heuristics]
-    Tooling -.-> |Keyword Matching| FastLogic
-    Compression -.-> |Summarizes history| LocalLLM[(Local Ollama)]
+    %% Pipeline Steps
+    subgraph Optimization Pipeline
+        direction TB
+        Router[1. Query Router]
+        Tools[2. Tool Selector]
+        Compressor[3. Context Compressor]
+        
+        RouterLogic[Regex Guardrail]
+        ToolLogic[Keyword Matcher]
+        CompressLogic[(Local Ollama)]
+        
+        Router -.-> |"Mistral vs Qwen"| RouterLogic
+        Tools -.-> |"Keep/Drop Tools"| ToolLogic
+        Compressor -.-> |"Summarize History"| CompressLogic
     end
-
-    Pipeline --> |Optimized Prompt + Model Choice| Inference[Target LLM Inference]
-    Inference -.-> |Generate Response| LocalLLM
-    Inference --> |Tokens & Simulated Costs| Metrics[(Metrics / Langfuse)]
     
-    Metrics --> Dashboard[React Dashboard]
-    Inference --> |Response| User
+    Assembler{Pipeline Merge}
+    FinalInference[Final LLM Call]
+    Metrics[(Langfuse / Metrics)]
+    Dashboard[React Dashboard]
+
+    %% The Flow
+    User --> |User Query| API
+    
+    %% Parallel Execution
+    API --> |Parallel| Router
+    API --> |Parallel| Tools
+    API --> |Parallel| Compressor
+
+    %% Assembly
+    RouterLogic --> Assembler
+    ToolLogic --> Assembler
+    CompressLogic --> Assembler
+    
+    %% Final Inference
+    Assembler --> |Optimized Prompt| FinalInference
+    FinalInference -.-> |Executes via| CompressLogic
+    
+    %% Results
+    FinalInference --> |Calculates Savings| Metrics
+    Metrics --> Dashboard
+    FinalInference --> |Text Response| User
 ```
 
 ## 📂 Project Structure
