@@ -38,9 +38,9 @@ graph TD
     API --> |Parallel Execution| Tooling[Tool Selector]
     API --> |Parallel Execution| Compression[Context Compressor]
     
-    Routing -.-> |Analyzes complexity| LocalLLM[(Local Ollama)]
-    Tooling -.-> |Filters tools| LocalLLM
-    Compression -.-> |Summarizes history| LocalLLM
+    Routing -.-> |Regex Guardrails| FastLogic[Instant Heuristics]
+    Tooling -.-> |Keyword Matching| FastLogic
+    Compression -.-> |Summarizes history| LocalLLM[(Local Ollama)]
     end
 
     Pipeline --> |Optimized Prompt + Model Choice| Inference[Target LLM Inference]
