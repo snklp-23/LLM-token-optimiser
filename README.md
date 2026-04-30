@@ -25,56 +25,31 @@ When a user submits a prompt, it doesn't go straight to the LLM. It hits the bac
 Once the parallel pipeline finishes, the backend combines the results. It takes the **shrunken tool list**, the **summarized history**, and the **user's query**, and sends that lightweight package to the dynamically selected local Ollama model to generate the actual response.
 
 ### 3. Telemetry & Analytics
-Before returning the response to the frontend, the backend calculates exactly how many tokens were saved and what the simulated monetary savings are. It records this data locally for the React dashboard, and (if configured) beams the detailed telemetry directly to a **Langfuse** cloud dashboard for permanent observability and debugging.
+Before returning the response to the frontend, the backend calculates exactly how many tokens were saved and what the simulated monetary savings are. It records this data locally for the React dashboard, allowing users to see their real-time token savings and simulated cost avoidance.
 
 ## 🏗️ Architecture Diagram
 
 ```mermaid
 graph TD
-    %% Define Nodes
-    User([User Client])
-    API[Express API /api/process]
-    Ollama[(Local Ollama Engine)]
+    User([User Client]) --> |User Query| API[Express API]
     
-    %% Pipeline Steps
     subgraph Optimization Pipeline
-        direction TB
-        Router[1. Query Router]
-        Tools[2. Tool Selector]
-        Compressor[3. Context Compressor]
+        API --> |Parallel| Router[Query Router]
+        API --> |Parallel| Tools[Tool Selector]
+        API --> |Parallel| Compressor[Context Compressor]
         
-        RouterLogic[Regex Guardrail]
-        ToolLogic[Keyword Matcher]
-        
-        Router -.-> |"Mistral vs Qwen"| RouterLogic
-        Tools -.-> |"Keep/Drop Tools"| ToolLogic
-        Compressor -.-> |"Summarize History"| Ollama
+        Router -.-> |Regex| FastLogic[Instant Heuristics]
+        Tools -.-> |Keywords| FastLogic
     end
     
-    Assembler{Pipeline Merge}
-    Metrics[(Langfuse / Metrics)]
-    Dashboard[React Dashboard]
-
-    %% The Flow
-    User --> |User Query| API
-    
-    %% Parallel Execution
-    API --> |Parallel| Router
-    API --> |Parallel| Tools
-    API --> |Parallel| Compressor
-
-    %% Assembly
-    RouterLogic --> Assembler
-    ToolLogic --> Assembler
+    FastLogic --> Assembler{Pipeline Merge}
+    Compressor -.-> |Summarize History| Ollama[(Local Ollama)]
     Compressor --> Assembler
     
-    %% Final Inference
     Assembler --> |Optimized Prompt| Ollama
+    Ollama --> |Text Response| API
     
-    %% Results
-    Ollama --> |Text Response & Token Counts| API
-    API --> |Calculates Savings| Metrics
-    Metrics --> Dashboard
+    API --> |Savings Data| Dashboard[React Dashboard]
     API --> |Final Response| User
 ```
 
