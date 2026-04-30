@@ -2,15 +2,30 @@
 
 Middleware designed to intelligently optimize AI token usage. This system acts as a proxy between your user queries and Large Language Models, applying a suite of real-time optimizations to reduce prompt sizes, lower latency, and dramatically cut down (simulated or real) API costs, all while relying on local, privacy-preserving Ollama models.
 
-## 🚀 How it Works
+## 🚀 How it Works (Deep Dive)
 
-The LLM Token Optimizer runs a 3-step parallel **Optimization Pipeline** before executing the actual target LLM inference. All these optimization steps leverage a fast, local LLM to minimize latency overhead:
+The system acts as a "smart detour" between the user and the final Large Language Model. Here is the exact end-to-end flow of how a prompt is optimized before it ever reaches the AI:
 
-1. **Query Routing**: Analyzes the complexity of the user query. Simple questions (e.g., greetings, basic math) are routed to a fast, cheap model (e.g., `qwen2.5:1.5b`), while complex analytical tasks are sent to an expensive/powerful model (e.g., `mistral`).
-2. **Tool Selection**: Instead of passing all available application tools in the system prompt, this module analyzes the query and strictly filters the tool list down to only the tools necessary to answer the current request, saving hundreds of context tokens.
-3. **Context Compression**: When conversation histories get too long, this module summarizes or drops older, less relevant messages, ensuring the context window remains small and efficient.
+### 1. The Interception & Parallel Pipeline
+When a user submits a prompt, it doesn't go straight to the LLM. It hits the backend Express server, which splits the request into **three independent optimization tasks running perfectly in parallel** (to ensure zero latency overhead):
 
-Once the optimizations are complete, the constructed, hyper-efficient prompt is sent to the selected model, and the token savings/costs are tracked via local metrics and Langfuse telemetry.
+* **Task A: Query Routing (The Fast Decision)**
+  * **Logic:** Does this query actually require a massive, expensive LLM?
+  * **Action:** It uses instantaneous Regex keyword matching (e.g., looking for words like `python`, `devops`, `aws`). If it finds technical keywords, it routes to the **expensive model** (`mistral`). If it doesn't, it assumes it's a general task and routes to the **cheap model** (`qwen2.5:1.5b`).
+  
+* **Task B: Tool Selection (The "Bouncer")**
+  * **Logic:** LLMs consume hundreds of tokens just reading the definitions of tools they are allowed to use. 
+  * **Action:** Instead of passing every tool blindly, it scans the prompt. If you ask about the "weather," it deletes the instruction schemas for the Calculator and Code Runner, keeping *only* the Weather tool. This shrinks the context drastically. *(Note: If the router picks the cheap model, this step strips ALL tools to ensure safety).*
+
+* **Task C: Context Compression**
+  * **Logic:** Infinite chat histories cause out-of-memory errors and massive API bills.
+  * **Action:** If the conversation history is too long, a local LLM is quickly spun up to summarize older messages into a dense paragraph while keeping recent messages verbatim.
+
+### 2. The Final LLM Call
+Once the parallel pipeline finishes, the backend combines the results. It takes the **shrunken tool list**, the **summarized history**, and the **user's query**, and sends that lightweight package to the dynamically selected local Ollama model to generate the actual response.
+
+### 3. Telemetry & Analytics
+Before returning the response to the frontend, the backend calculates exactly how many tokens were saved and what the simulated monetary savings are. It records this data locally for the React dashboard, and (if configured) beams the detailed telemetry directly to a **Langfuse** cloud dashboard for permanent observability and debugging.
 
 ## 🏗️ Architecture Diagram
 
