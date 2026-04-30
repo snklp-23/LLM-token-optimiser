@@ -18,15 +18,23 @@ function MetricCard({ icon, label, value, tone }) {
   );
 }
 
-function BreakdownRow({ icon, label, value, total }) {
+function BreakdownRow({ icon, label, value, total, detail, valueText }) {
+  const displayValue = valueText !== undefined ? valueText : value;
   return (
-    <div className="breakdown-row">
-      <div className="breakdown-label">
-        {icon}
-        <span>{label}</span>
+    <div className="breakdown-row" style={{ alignItems: detail ? "flex-start" : "center" }}>
+      <div className="breakdown-info">
+        <div className="breakdown-label">
+          {icon}
+          <span>{label}</span>
+        </div>
+        {detail ? (
+          <div className="breakdown-detail" style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px", marginLeft: "24px" }}>
+            {detail}
+          </div>
+        ) : null}
       </div>
-      <strong>
-        {value} <span>{percent(value, total)}</span>
+      <strong style={{ marginTop: detail ? "2px" : "0" }}>
+        {displayValue} <span>{total ? percent(value, total) : "0%"}</span>
       </strong>
     </div>
   );
@@ -116,22 +124,27 @@ function MetricsPanel({ currentMetrics, processSteps }) {
             <BreakdownRow
               icon={<Wrench size={16} />}
               label="Tool Selection"
+              detail={`Kept ${currentMetrics.selectedTools?.length || 0} tools`}
               total={totalBreakdown}
               value={currentMetrics.tokensFromToolSelection}
             />
             <BreakdownRow
               icon={<Scissors size={16} />}
               label="Context Compression"
+              detail={currentMetrics.tokensFromContextCompression > 0 ? "Summarized old messages" : "No compression needed"}
               total={totalBreakdown}
               value={currentMetrics.tokensFromContextCompression}
             />
             <BreakdownRow
               icon={<Route size={16} />}
               label="Query Routing"
+              detail={currentMetrics.modelUsed && currentMetrics.modelUsed.includes("qwen") ? "Routed to cheap model" : "Routed to expensive model"}
               total={totalBreakdown}
               value={currentMetrics.tokensFromQueryRouting}
             />
           </div>
+
+
 
           {currentMetrics.routingReason ? (
             <div className="routing-note">

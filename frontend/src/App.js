@@ -94,17 +94,25 @@ function buildMetrics(processResult, optimizationOutput) {
   const savings = optimizationOutput?.tokenSavingsMetrics || {};
   const costs = optimizationOutput?.optimizationCosts || {};
   const tokensSaved = savings.totalEstimatedTokensSaved || 0;
+
+  const inputTokens = Number(processResult.inputTokens || 0);
+  const outputTokens = Number(processResult.outputTokens || 0);
+
   const tokensAfterOptimization =
-    Number(processResult.inputTokens || 0) +
-    Number(processResult.outputTokens || 0) +
+    inputTokens +
+    outputTokens +
     Number(optimizationOutput?.optimizationDetails?.router?.flashTokensUsed || 0) +
     Number(optimizationOutput?.optimizationDetails?.toolSelector?.flashTokensUsed || 0) +
     Number(optimizationOutput?.optimizationDetails?.contextCompressor?.flashTokensUsed || 0);
+    
   const tokensBeforeOptimization = tokensAfterOptimization + tokensSaved;
+  
   const costAfterOptimization = money(processResult.totalCost) + money(costs.totalFlashCost);
-  const costBeforeOptimization =
-    costAfterOptimization +
-    money(tokensSaved * (String(processResult.model || "").includes("pro") ? 0.0000008 : 0.00000006));
+  
+  // Unoptimized requests would default to the expensive model to handle any tool/complex routing.
+  // Expensive mock cost: $0.80 / 1M input, $3.20 / 1M output
+  const unoptimizedInputTokens = inputTokens + tokensSaved;
+  const costBeforeOptimization = (unoptimizedInputTokens * 0.0000008) + (outputTokens * 0.0000032);
 
   return {
     tokensBeforeOptimization,
@@ -344,7 +352,7 @@ function App() {
           tokensFromContextCompression:
             latest.tokenSavingsMetrics?.tokensSavedByContextCompression || 0,
           tokensFromQueryRouting: latest.tokenSavingsMetrics?.tokensAvoidedByQueryRouting || 0,
-          costBeforeOptimization: latest.totalCost || 0,
+          costBeforeOptimization: ((latest.inputTokens || 0) + (latest.tokensSaved || 0)) * 0.0000008 + (latest.outputTokens || 0) * 0.0000032,
           costAfterOptimization: latest.totalCost || 0,
           flashOptimizationCost: latest.optimizationCosts?.totalFlashCost || 0,
           mainModelCost: latest.totalCost || 0,
