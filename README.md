@@ -34,6 +34,7 @@ graph TD
     %% Define Nodes
     User([User Client])
     API[Express API /api/process]
+    Ollama[(Local Ollama Engine)]
     
     %% Pipeline Steps
     subgraph Optimization Pipeline
@@ -44,15 +45,13 @@ graph TD
         
         RouterLogic[Regex Guardrail]
         ToolLogic[Keyword Matcher]
-        CompressLogic[(Local Ollama)]
         
         Router -.-> |"Mistral vs Qwen"| RouterLogic
         Tools -.-> |"Keep/Drop Tools"| ToolLogic
-        Compressor -.-> |"Summarize History"| CompressLogic
+        Compressor -.-> |"Summarize History"| Ollama
     end
     
     Assembler{Pipeline Merge}
-    FinalInference[Final LLM Call]
     Metrics[(Langfuse / Metrics)]
     Dashboard[React Dashboard]
 
@@ -67,16 +66,16 @@ graph TD
     %% Assembly
     RouterLogic --> Assembler
     ToolLogic --> Assembler
-    CompressLogic --> Assembler
+    Compressor --> Assembler
     
     %% Final Inference
-    Assembler --> |Optimized Prompt| FinalInference
-    FinalInference -.-> |Executes via| CompressLogic
+    Assembler --> |Optimized Prompt| Ollama
     
     %% Results
-    FinalInference --> |Calculates Savings| Metrics
+    Ollama --> |Text Response & Token Counts| API
+    API --> |Calculates Savings| Metrics
     Metrics --> Dashboard
-    FinalInference --> |Text Response| User
+    API --> |Final Response| User
 ```
 
 ## 📂 Project Structure
