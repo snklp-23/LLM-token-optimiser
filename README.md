@@ -18,7 +18,7 @@ Once the optimizations are complete, the constructed, hyper-efficient prompt is 
 graph TD
     User([User Client]) --> |User Query & History| API[Express API /api/process]
     
-    subgraph Optimization Pipeline
+    subgraph Pipeline
     API --> |Parallel Execution| Routing[Query Router]
     API --> |Parallel Execution| Tooling[Tool Selector]
     API --> |Parallel Execution| Compression[Context Compressor]
@@ -28,7 +28,7 @@ graph TD
     Compression -.-> |Summarizes history| LocalLLM
     end
 
-    Optimization Pipeline --> |Optimized Prompt + Model Choice| Inference[Target LLM Inference]
+    Pipeline --> |Optimized Prompt + Model Choice| Inference[Target LLM Inference]
     Inference -.-> |Generate Response| LocalLLM
     Inference --> |Tokens & Simulated Costs| Metrics[(Metrics / Langfuse)]
     
