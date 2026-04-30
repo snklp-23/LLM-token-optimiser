@@ -31,35 +31,15 @@ Before returning the response to the frontend, the backend calculates exactly ho
 
 ```mermaid
 graph TD
-    User([User Client]) -->|1. User Query| API[Express API]
+    User([User]) --> |1. Sends Query| Backend[Node.js Backend]
     
-    subgraph Optimization Pipeline
-        direction TB
-        Router[Query Router]
-        Tools[Tool Selector]
-        Compressor[Context Compressor]
-        
-        FastLogic[Instant Heuristics]
-        Assembler{Pipeline Merge}
-        
-        Router -.->|Regex| FastLogic
-        Tools -.->|Keywords| FastLogic
-        
-        FastLogic --> Assembler
-        Compressor --> Assembler
-    end
-
-    API -->|2. Parallel Exec| Router
-    API -->|2. Parallel Exec| Tools
-    API -->|2. Parallel Exec| Compressor
+    Backend --> |2. Intercepts Prompt| Pipeline[Optimization Pipeline]
     
-    Compressor -.->|3. Summarize History| Ollama[(Local Ollama)]
-    Assembler -->|4. Optimized Prompt| Ollama
+    Pipeline --> |3. Shrinks & Routes| LLM[(Local Ollama)]
     
-    Ollama -->|5. Text Response| API
+    LLM --> |4. Generates Text| Backend
     
-    API -->|6. Savings Data| Dashboard[React Dashboard]
-    API -->|7. Final Response| User
+    Backend --> |5. Shows Savings| Dashboard[React Dashboard]
 ```
 
 ## 📂 Project Structure
